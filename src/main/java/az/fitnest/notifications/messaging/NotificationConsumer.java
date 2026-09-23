@@ -54,6 +54,37 @@ public class NotificationConsumer {
         }
     }
 
+    @KafkaListener(topics = "subscription-freeze-events", groupId = "notifications-freeze-group", properties = {"spring.json.value.default.type=java.util.Map"})
+    public void consumeFreezeEvent(Map<String, Object> event) {
+        String eventType = (String) event.get("eventType");
+        Object userIdObj = event.get("userId");
+        if (userIdObj == null || eventType == null) {
+            return;
+        }
+
+        Long userId = parseUserId(userIdObj);
+        if (userId == null) {
+            return;
+        }
+
+        Map<String, String> data = new HashMap<>();
+        for (Map.Entry<String, Object> entry : event.entrySet()) {
+            if (entry.getValue() != null) {
+                data.put(entry.getKey(), String.valueOf(entry.getValue()));
+            }
+        }
+
+        switch (eventType) {
+            case "subscription_frozen", "freeze_started" ->
+                notificationService.sendPushToUser(userId, "FitNest Freeze", "Abunəliyiniz donduruldu", data);
+            case "subscription_unfrozen", "freeze_completed" ->
+                notificationService.sendPushToUser(userId, "FitNest Freeze", "Abunəliyiniz yenidən aktivdir", data);
+            case "freeze_ended_early" ->
+                notificationService.sendPushToUser(userId, "FitNest Freeze", "Dondurulma vaxtından əvvəl tamamlandı", data);
+            default -> log.debug("Freeze event type: {}", eventType);
+        }
+    }
+
     private Long parseUserId(Object obj) {
         if (obj instanceof Number) {
             return ((Number) obj).longValue();
