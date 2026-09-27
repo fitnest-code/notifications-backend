@@ -88,8 +88,13 @@ public class NotificationServiceImpl implements NotificationService {
             return PushResult.builder().notificationId(notificationId).build();
         }
 
+        Map<String, String> payloadData = data != null ? new java.util.HashMap<>(data) : new java.util.HashMap<>();
+        if (notificationId != null) {
+            payloadData.put("notificationId", String.valueOf(notificationId));
+        }
+
         PushDeliveryService.MulticastSendResult sendResult =
-                pushDeliveryService.sendMulticastInChunks(tokens, title, body, data);
+                pushDeliveryService.sendMulticastInChunks(tokens, title, body, payloadData);
 
         pushDeliveryService.cleanupTokensAndUpdateStatus(
                 notificationId,
@@ -190,10 +195,13 @@ public class NotificationServiceImpl implements NotificationService {
         Device device = deviceRepository.findById(deviceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Cihaz tapılmadı"));
 
-        pushDeliveryService.savePendingNotification(device.getUserId(), title, body);
+        Notification notification = pushDeliveryService.savePendingNotification(device.getUserId(), title, body);
 
         if (Boolean.TRUE.equals(device.getNotificationEnabled())) {
-            pushDeliveryService.sendToToken(device.getPushToken(), title, body, Collections.emptyMap());
+            Map<String, String> data = notification.getId() != null
+                    ? Map.of("notificationId", String.valueOf(notification.getId()))
+                    : Collections.emptyMap();
+            pushDeliveryService.sendToToken(device.getPushToken(), title, body, data);
         } else {
             logger.info("Skipping push notification to device {} because notifications are disabled.", deviceId);
         }

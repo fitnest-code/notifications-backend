@@ -153,7 +153,12 @@ public class PushDeliveryServiceImpl implements PushDeliveryService {
             return;
         }
 
-        MulticastSendResult sendResult = sendMulticastInChunks(tokens, title, body, data);
+        Map<String, String> payloadData = data != null ? new java.util.HashMap<>(data) : new java.util.HashMap<>();
+        if (notificationId != null) {
+            payloadData.put("notificationId", String.valueOf(notificationId));
+        }
+
+        MulticastSendResult sendResult = sendMulticastInChunks(tokens, title, body, payloadData);
         cleanupTokensAndUpdateStatus(
                 notificationId,
                 sendResult.staleTokens(),
