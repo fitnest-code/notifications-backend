@@ -30,7 +30,16 @@ public class SubscriptionEventConsumer {
     private static final String HOME_GYM_REMOVED_BY_SWITCH = "HOME_GYM_REMOVED_BY_SWITCH";
     private static final String HOME_GYM_DISABLED_BY_GYM = "HOME_GYM_DISABLED_BY_GYM";
     private static final String HOME_GYM_ENDED = "HOME_GYM_ENDED";
+    private static final String HOME_GYM_PACKAGE_REMOVED = "HOME_GYM_PACKAGE_REMOVED";
+    private static final String HOME_GYM_REMINDER = "HOME_GYM_REMINDER";
     private static final String SETTLEMENT_COMPLETED = "SETTLEMENT_COMPLETED";
+
+    /**
+     * Refund and subscription-end already have their own push; the HOME_GYM_ENDED text
+     * ("choose a new home gym") would be wrong because there is no subscription to use.
+     */
+    private static final java.util.Set<String> SILENT_END_REASONS = java.util.Set.of(
+            "REFUND", "SUBSCRIPTION_ENDED");
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
@@ -62,8 +71,17 @@ public class SubscriptionEventConsumer {
             case HOME_GYM_REMOVED_BY_SWITCH -> sendLocalized(
                     userId, event, "home_gym.push.removed.title", "home_gym.push.removed.body", data);
             case HOME_GYM_DISABLED_BY_GYM -> sendGymDisabled(userId, event, data);
-            case HOME_GYM_ENDED -> sendLocalized(
-                    userId, event, "home_gym.push.ended.title", "home_gym.push.ended.body", data);
+            case HOME_GYM_ENDED -> {
+                if (SILENT_END_REASONS.contains(asString(event.get("endReason")))) {
+                    log.debug("HOME_GYM_ENDED push suppressed for user {} (reason {})",
+                            userId, event.get("endReason"));
+                } else {
+                    sendLocalized(userId, event,
+                            "home_gym.push.ended.title", "home_gym.push.ended.body", data);
+                }
+            }
+            case HOME_GYM_PACKAGE_REMOVED -> sendPackageRemoved(userId, event, data);
+            case HOME_GYM_REMINDER -> sendReminder(userId, data);
             case SETTLEMENT_COMPLETED -> log.debug("Settlement event ignored for user {}", userId);
             default -> log.debug("Subscription event {} ignored for user {}", action, userId);
         }
@@ -105,6 +123,52 @@ public class SubscriptionEventConsumer {
         Locale locale = locale(resolveLanguage(userId));
         Object[] args = new Object[]{gymName(event, locale)};
         deliver(userId, message(titleKey, args, locale), message(bodyKey, args, locale), data);
+    }
+
+    /**
+     * F-04: "{gym} is leaving your package". Admin-provided texts are not used here — the
+     * default text mentions the remaining visits and the end date.
+     */
+    private void sendPackageRemoved(Long userId, Map<String, Object> event, Map<String, String> data) {
+        String language = resolveLanguage(userId);
+        Locale locale = locale(language);
+        String gym = gymName(event, locale);
+        String packageName = asString(event.get("packageName"));
+        String endsAt = formatDate(asString(event.get("endsAt")));
+
+        String title = localizedValue(event.get("title"), language);
+        String body = localizedValue(event.get("body"), language);
+        if (title == null) {
+            title = message("home_gym.push.package_removed.title", new Object[]{gym}, locale);
+        }
+        if (body == null) {
+            String key;
+            Object[] args;
+            if (packageName != null && endsAt != null) {
+                key = "home_gym.push.package_removed.body";
+                args = new Object[]{gym, packageName, endsAt};
+            } else if (packageName != null) {
+                key = "home_gym.push.package_removed.body.no_date";
+                args = new Object[]{gym, packageName};
+            } else if (endsAt != null) {
+                key = "home_gym.push.package_removed.body.no_package";
+                args = new Object[]{gym, endsAt};
+            } else {
+                key = "home_gym.push.package_removed.body.no_package.no_date";
+                args = new Object[]{gym};
+            }
+            body = message(key, args, locale);
+        }
+        deliver(userId, title, body, data);
+    }
+
+    /** Push table: 24h after purchase without a home-gym selection, once per subscription. */
+    private void sendReminder(Long userId, Map<String, String> data) {
+        Locale locale = locale(resolveLanguage(userId));
+        deliver(userId,
+                message("home_gym.push.reminder.title", null, locale),
+                message("home_gym.push.reminder.body", null, locale),
+                data);
     }
 
     private void deliver(Long userId, String title, String body, Map<String, String> data) {
@@ -177,6 +241,9 @@ public class SubscriptionEventConsumer {
     }
 
     private static String formatDate(String validUntil) {
+        if (validUntil == null) {
+            return null;
+        }
         try {
             return OffsetDateTime.parse(validUntil).format(DATE_FORMAT);
         } catch (DateTimeParseException e) {
