@@ -35,6 +35,9 @@ public class NewGymNotificationServiceImpl implements NewGymNotificationService 
         data.put("type", "NEW_GYM");
         if (!gymIdStr.isEmpty()) {
             data.put("gymId", gymIdStr);
+            data.put("targetType", "GYM");
+            data.put("targetId", gymIdStr);
+            data.put("deeplink", "fitnest://gyms/" + gymIdStr);
         }
 
         return localizedBroadcastService.broadcast(contents, data);

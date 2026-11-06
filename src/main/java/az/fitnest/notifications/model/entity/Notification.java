@@ -49,4 +49,22 @@ public class Notification extends BaseAuditableEntity {
 
     @Column(name = "failure_reason", columnDefinition = "TEXT")
     private String failureReason;
+
+    /**
+     * Event name carried in the FCM data map, such as NEW_GYM or CAMPAIGN.
+     * Nullable so rows written before deep links, and pushes with no screen, stay valid.
+     */
+    @Column(name = "type", length = 64)
+    private String type;
+
+    /** Screen family the tap should open: GYM, CAMPAIGN, or null for inbox-only. */
+    @Column(name = "target_type", length = 64)
+    private String targetType;
+
+    @Column(name = "target_id", length = 64)
+    private String targetId;
+
+    /** In-app route. Built by the server; clients do not invent it. */
+    @Column(name = "deeplink", length = 512)
+    private String deeplink;
 }

@@ -1,6 +1,7 @@
 package az.fitnest.notifications.service;
 
 import az.fitnest.notifications.dto.NotificationDto;
+import az.fitnest.notifications.dto.NotificationV2Dto;
 import az.fitnest.notifications.dto.PushResult;
 import az.fitnest.notifications.model.entity.Device;
 import az.fitnest.notifications.model.enums.Platform;
@@ -45,6 +46,8 @@ public interface NotificationService {
     void sendToDevice(Long deviceId, String title, String body);
 
     Page<NotificationDto> getUserNotifications(Long userId, Pageable pageable);
+
+    Page<NotificationV2Dto> getUserNotificationsV2(Long userId, Pageable pageable);
 
     void markNotificationAsRead(Long id, Long userId);
 

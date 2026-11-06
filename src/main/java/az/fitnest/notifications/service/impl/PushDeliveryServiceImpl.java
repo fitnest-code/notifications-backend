@@ -4,6 +4,7 @@ import az.fitnest.notifications.model.entity.Notification;
 import az.fitnest.notifications.model.enums.NotificationStatus;
 import az.fitnest.notifications.repository.DeviceRepository;
 import az.fitnest.notifications.repository.NotificationRepository;
+import az.fitnest.notifications.service.NotificationRouting;
 import az.fitnest.notifications.service.PushDeliveryService;
 import com.google.firebase.messaging.AndroidConfig;
 import com.google.firebase.messaging.AndroidNotification;
@@ -139,7 +140,8 @@ public class PushDeliveryServiceImpl implements PushDeliveryService {
     @Override
     @Transactional
     public void deliverIgnoringSession(Long userId, String title, String body, Map<String, String> data) {
-        Notification notification = savePendingNotification(userId, title, body);
+        Map<String, String> payloadData = NotificationRouting.enrich(data);
+        Notification notification = savePendingNotification(userId, title, body, payloadData);
         Long notificationId = notification.getId();
 
         if (firebaseMessaging.isEmpty()) {
@@ -153,7 +155,6 @@ public class PushDeliveryServiceImpl implements PushDeliveryService {
             return;
         }
 
-        Map<String, String> payloadData = data != null ? new java.util.HashMap<>(data) : new java.util.HashMap<>();
         if (notificationId != null) {
             payloadData.put("notificationId", String.valueOf(notificationId));
         }
@@ -189,12 +190,19 @@ public class PushDeliveryServiceImpl implements PushDeliveryService {
     @Override
     @Transactional
     public Notification savePendingNotification(Long userId, String title, String body) {
+        return savePendingNotification(userId, title, body, null);
+    }
+
+    @Override
+    @Transactional
+    public Notification savePendingNotification(Long userId, String title, String body, Map<String, String> data) {
         Notification notification = new Notification();
         notification.setUserId(userId);
         notification.setTitle(title);
         notification.setBody(body);
         notification.setRead(false);
         notification.setStatus(NotificationStatus.PENDING);
+        NotificationRouting.apply(notification, data);
         return notificationRepository.save(notification);
     }
 

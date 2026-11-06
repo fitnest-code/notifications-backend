@@ -1,6 +1,7 @@
 package az.fitnest.notifications.service.impl;
 
 import az.fitnest.notifications.dto.NotificationDto;
+import az.fitnest.notifications.dto.NotificationV2Dto;
 import az.fitnest.notifications.dto.PushResult;
 import az.fitnest.notifications.exception.ResourceNotFoundException;
 import az.fitnest.notifications.grpc.IdentityGrpcClient;
@@ -15,6 +16,7 @@ import az.fitnest.notifications.service.DeviceRegistrationService;
 import az.fitnest.notifications.service.LocalizedBroadcastService;
 import az.fitnest.notifications.service.LsimSmsService;
 import az.fitnest.notifications.service.NewGymNotificationService;
+import az.fitnest.notifications.service.NotificationRouting;
 import az.fitnest.notifications.service.NotificationService;
 import az.fitnest.notifications.service.PushDeliveryService;
 import lombok.RequiredArgsConstructor;
@@ -79,7 +81,8 @@ public class NotificationServiceImpl implements NotificationService {
         } catch (Exception ignored) {
         }
 
-        Notification notification = pushDeliveryService.savePendingNotification(userId, title, body);
+        Map<String, String> payloadData = NotificationRouting.enrich(data);
+        Notification notification = pushDeliveryService.savePendingNotification(userId, title, body, payloadData);
         Long notificationId = notification.getId();
 
         List<String> tokens = deviceRepository.findPushTokensByUserId(userId);
@@ -88,7 +91,6 @@ public class NotificationServiceImpl implements NotificationService {
             return PushResult.builder().notificationId(notificationId).build();
         }
 
-        Map<String, String> payloadData = data != null ? new java.util.HashMap<>(data) : new java.util.HashMap<>();
         if (notificationId != null) {
             payloadData.put("notificationId", String.valueOf(notificationId));
         }
@@ -213,28 +215,39 @@ public class NotificationServiceImpl implements NotificationService {
             return Page.empty(pageable);
         }
 
-        Pageable finalPageable = pageable;
-        if (pageable.getSort().isSorted()) {
-            finalPageable = org.springframework.data.domain.PageRequest.of(
-                    pageable.getPageNumber(),
-                    pageable.getPageSize(),
-                    org.springframework.data.domain.Sort.by(
-                            pageable.getSort().stream()
-                                    .map(order -> {
-                                        if ("createdAt".equals(order.getProperty())) {
-                                            return order.isAscending()
-                                                    ? org.springframework.data.domain.Sort.Order.asc("createdDate")
-                                                    : org.springframework.data.domain.Sort.Order.desc("createdDate");
-                                        }
-                                        return order;
-                                    })
-                                    .collect(Collectors.toList())
-                    )
-            );
-        }
-
-        return notificationRepository.findAllByUserIdOrderByCreatedDateDesc(userId, finalPageable)
+        return notificationRepository.findAllByUserIdOrderByCreatedDateDesc(userId, unsorted(pageable))
                 .map(NotificationMapper::toDto);
+    }
+
+    @Override
+    public Page<NotificationV2Dto> getUserNotificationsV2(Long userId, Pageable pageable) {
+        if (userId == null) {
+            return Page.empty(pageable);
+        }
+        return notificationRepository.findAllByUserIdOrderByCreatedDateDesc(userId, unsorted(pageable))
+                .map(NotificationMapper::toV2Dto);
+    }
+
+    private Pageable unsorted(Pageable pageable) {
+        if (!pageable.getSort().isSorted()) {
+            return pageable;
+        }
+        return org.springframework.data.domain.PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                org.springframework.data.domain.Sort.by(
+                        pageable.getSort().stream()
+                                .map(order -> {
+                                    if ("createdAt".equals(order.getProperty())) {
+                                        return order.isAscending()
+                                                ? org.springframework.data.domain.Sort.Order.asc("createdDate")
+                                                : org.springframework.data.domain.Sort.Order.desc("createdDate");
+                                    }
+                                    return order;
+                                })
+                                .collect(Collectors.toList())
+                )
+        );
     }
 
     @Override

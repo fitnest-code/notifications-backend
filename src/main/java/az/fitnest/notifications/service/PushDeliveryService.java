@@ -24,6 +24,12 @@ public interface PushDeliveryService {
 
     Notification savePendingNotification(Long userId, String title, String body);
 
+    /**
+     * Same inbox row as {@link #savePendingNotification(Long, String, String)}, plus the
+     * routing fields resolved from {@code data}. A null or empty map leaves the target blank.
+     */
+    Notification savePendingNotification(Long userId, String title, String body, Map<String, String> data);
+
     void updateNotificationStatus(Long notificationId, NotificationStatus status, int sentCount, int failedCount, String failureReason);
 
     void cleanupTokensAndUpdateStatus(Long notificationId, List<String> staleTokens, int sentCount, int failedCount, String failureReason);
